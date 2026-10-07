@@ -1,0 +1,28 @@
+TECNO-HOGAR ETL — CODIGO M POWER QUERY (pegar en Editor avanzado de cada consulta)
+====================================================================
+LCientes:
+let Origen=Excel.CurrentWorkbook(){[Name="Clientes"]}[Content], P1=Table.PromoteHeaders(Origen,[PromoteAllScalars=true]),
+T=Table.TransformColumns(P1,{{"id_cliente",Text.Trim, type text},{"nombre",each Text.Clean(Text.Trim(_)),type text},{"ciudad",each Text.Clean(Text.Trim(_)),type text}}),
+E1=Table.ReplaceValue(T,"BOGOTA","Bogotá",Replacer.ReplaceText,{"ciudad"}), E2=Table.ReplaceValue(E1,"bogotá","Bogotá",Replacer.ReplaceText,{"ciudad"}),
+E3=Table.ReplaceValue(E2,"BOGOTÁ","Bogotá",Replacer.ReplaceText,{"ciudad"}), E4=Table.ReplaceValue(E3,"Medellin","Medellín",Replacer.ReplaceText,{"ciudad"}),
+E5=Table.ReplaceValue(E4,"MEDELLÍN","Medellín",Replacer.ReplaceText,{"ciudad"}), E6=Table.ReplaceValue(E5," cali","Cali",Replacer.ReplaceText,{"ciudad"}),
+N=Table.ReplaceValue(Table.ReplaceValue(Table.ReplaceValue(Table.ReplaceValue(E6,"N/A",null,Replacer.ReplaceValue,{"correo","telefono"}),"NULL",null,Replacer.ReplaceValue,{"correo","telefono"}),"Sin dato",null,Replacer.ReplaceValue,{"correo","telefono"}),"-",null,Replacer.ReplaceValue,{"telefono"}),
+D=Table.Distinct(N,{"id_cliente"}) in D
+
+LProductos: quitar "columna_innecesaria" (Table.RemoveColumns), Trim+Clean categoria, estandarizar (portatiles->Portátiles, accesorios->Accesorios, CELULARES/celulares->Celulares, IMPRESORAS->Impresoras), precio=Number.FromText(Text.Remove(Text.Remove([precio],{"$"}),{".",","})) handle N/A/NULL/- -> null, filtrar [precio]>0 and [costo]>0, Distinct codigo_producto.
+
+LVendedores: Trim/Clean, [vendedor]=Text.Proper, sede: "sede norte"->"Sede Norte", "SEDE SUR"->"Sede Sur"; ciudad igual que clientes; Distinct id_vendedor.
+
+LVentas_Consolidada: Table.Combine({Ventas_Agosto,Ventas_Septiembre}) + Trim claves + fecha a date + cantidad Int64 + descuento: if Text.Contains([descuento],"%") then Number.FromText(Text.Remove([descuento],{"%"}))/100 else null.
+
+LBD_VENTAS_ETL:
+let V=Ventas_Consolidada, C1=Table.NestedJoin(V,"id_cliente",Clientes_Limpia,"id_cliente","C",JoinKind.LeftOuter), E1=Table.ExpandTableColumn(C1,"C",{"nombre","ciudad"},{"cliente","ciudad_cliente"}),
+C2=Table.NestedJoin(E1,"codigo_producto",Productos_Limpia,"codigo_producto","P",JoinKind.LeftOuter), E2=Table.ExpandTableColumn(C2,"P",{"producto","categoria","precio","costo"},{"producto","categoria","precio","costo"}),
+C3=Table.NestedJoin(E2,"id_vendedor",Vendedores_Limpia,"id_vendedor","Vd",JoinKind.LeftOuter), E3=Table.ExpandTableColumn(C3,"Vd",{"vendedor"},{"vendedor"}),
+Ok=Table.SelectRows(E3,each [cliente]<>null and [producto]<>null and [vendedor]<>null and [cantidad]>0 and [descuento]>=0 and [descuento]<=0.3 and [precio]>0 and [costo]>0),
+B=Table.AddColumn(Ok,"Total_Bruto",each [cantidad]*[precio],type number), Vd2=Table.AddColumn(B,"Valor_Descuento",each [Total_Bruto]*[descuento],type number),
+N2=Table.AddColumn(Vd2,"Total_Neto",each [Total_Bruto]-[Valor_Descuento],type number), Ct=Table.AddColumn(N2,"Costo_Total",each [cantidad]*[costo],type number),
+U=Table.AddColumn(Ct,"Utilidad",each [Total_Neto]-[Costo_Total],type number), Cl=Table.AddColumn(U,"Clasificacion_Venta",each if [Total_Neto]>=2000000 then "Alta" else if [Total_Neto]>=500000 then "Media" else "Baja",type text) in Cl
+
+LRechazados: Table.SelectRows(paso E3, each [cliente]=null or [producto]=null or [vendedor]=null or [cantidad]<=0 or [descuento]>0.3) + columna Motivo_Rechazo.
+CARGAR: BD_VENTAS_ETL y RECHAZADOS como "Cargar en tabla" a hojas. Tablas limpias al Modelo de datos para Power Pivot opcional.
