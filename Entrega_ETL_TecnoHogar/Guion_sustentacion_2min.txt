@@ -1,3 +1,4 @@
+Autores: David Fonseca y Cesar Cardozo
 SUSTENTACIÓN 2 MIN:
 1) Problema: duplicados, N/A/NULL, espacios, ciudades/categorías mixtas, precios texto, fechas mixtas, cantidad<=0, descuento>30%, FK huérfanas.
 2) Transformación: Trim+Clean, estandarizar, reemplazar a null, tipos, quitar duplicados/col innecesaria, anexar ago+sep, combinar Left Outer por 3 claves, 6 columnas (Bruto, Descuento, Neto, Costo, Utilidad, Clasif Alta/Media/Baja).
